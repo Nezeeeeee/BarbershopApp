@@ -12,7 +12,7 @@ namespace BarbershopApp
         private DataGridView dgvAppointments;
         private DateTimePicker dtpDate;
         private ComboBox cmbStatus;
-        private Button btnComplete, btnCancel, btnRefresh, btnPayment;
+        private Button btnComplete, btnCancel, btnRefresh, btnPayment, btnDelete;
         private CheckBox chkShowAll;
         private Label lblInfo;
 
@@ -20,7 +20,7 @@ namespace BarbershopApp
         {
             dbHelper = helper;
             this.Text = "Журнал записей";
-            this.Size = new Size(1200, 700);
+            this.Size = new Size(1300, 700);
             this.StartPosition = FormStartPosition.CenterParent;
             this.IsMdiContainer = false;
 
@@ -93,9 +93,9 @@ namespace BarbershopApp
             buttonPanel.BackColor = Color.White;
 
             btnComplete = new Button();
-            btnComplete.Text = "✓ Отметить выполненным";
+            btnComplete.Text = "✓ Выполнено";
             btnComplete.Location = new Point(10, 10);
-            btnComplete.Size = new Size(180, 30);
+            btnComplete.Size = new Size(100, 30);
             btnComplete.BackColor = Color.FromArgb(46, 204, 113);
             btnComplete.ForeColor = Color.White;
             btnComplete.FlatStyle = FlatStyle.Flat;
@@ -104,10 +104,10 @@ namespace BarbershopApp
             btnComplete.Click += BtnComplete_Click;
 
             btnCancel = new Button();
-            btnCancel.Text = "✗ Отменить запись";
-            btnCancel.Location = new Point(200, 10);
-            btnCancel.Size = new Size(150, 30);
-            btnCancel.BackColor = Color.FromArgb(231, 76, 60);
+            btnCancel.Text = "✗ Отменить";
+            btnCancel.Location = new Point(120, 10);
+            btnCancel.Size = new Size(100, 30);
+            btnCancel.BackColor = Color.FromArgb(241, 176, 23);
             btnCancel.ForeColor = Color.White;
             btnCancel.FlatStyle = FlatStyle.Flat;
             btnCancel.FlatAppearance.BorderSize = 0;
@@ -115,9 +115,9 @@ namespace BarbershopApp
             btnCancel.Click += BtnCancel_Click;
 
             btnPayment = new Button();
-            btnPayment.Text = "💰 Принять оплату";
-            btnPayment.Location = new Point(360, 10);
-            btnPayment.Size = new Size(150, 30);
+            btnPayment.Text = "💰 Оплата";
+            btnPayment.Location = new Point(230, 10);
+            btnPayment.Size = new Size(100, 30);
             btnPayment.BackColor = Color.FromArgb(52, 152, 219);
             btnPayment.ForeColor = Color.White;
             btnPayment.FlatStyle = FlatStyle.Flat;
@@ -125,9 +125,20 @@ namespace BarbershopApp
             btnPayment.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
             btnPayment.Click += BtnPayment_Click;
 
+            btnDelete = new Button();
+            btnDelete.Text = "🗑 Удалить";
+            btnDelete.Location = new Point(340, 10);
+            btnDelete.Size = new Size(100, 30);
+            btnDelete.BackColor = Color.FromArgb(231, 76, 60);
+            btnDelete.ForeColor = Color.White;
+            btnDelete.FlatStyle = FlatStyle.Flat;
+            btnDelete.FlatAppearance.BorderSize = 0;
+            btnDelete.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+            btnDelete.Click += BtnDelete_Click;
+
             btnRefresh = new Button();
             btnRefresh.Text = "🔄 Обновить";
-            btnRefresh.Location = new Point(520, 10);
+            btnRefresh.Location = new Point(450, 10);
             btnRefresh.Size = new Size(100, 30);
             btnRefresh.BackColor = Color.FromArgb(149, 165, 166);
             btnRefresh.ForeColor = Color.White;
@@ -139,6 +150,7 @@ namespace BarbershopApp
             buttonPanel.Controls.Add(btnComplete);
             buttonPanel.Controls.Add(btnCancel);
             buttonPanel.Controls.Add(btnPayment);
+            buttonPanel.Controls.Add(btnDelete);
             buttonPanel.Controls.Add(btnRefresh);
 
             // Таблица записей
@@ -694,6 +706,113 @@ namespace BarbershopApp
             catch (Exception ex)
             {
                 MessageBox.Show($"Ошибка при оплате: {ex.Message}", "Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void BtnDelete_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (dgvAppointments.CurrentRow == null)
+                {
+                    MessageBox.Show("Выберите запись для удаления", "Информация",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // Получаем ID
+                if (dgvAppointments.CurrentRow.Cells["Id"].Value == null ||
+                    dgvAppointments.CurrentRow.Cells["Id"].Value == DBNull.Value)
+                {
+                    MessageBox.Show("Не удалось определить ID записи", "Ошибка",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                int appointmentId = Convert.ToInt32(dgvAppointments.CurrentRow.Cells["Id"].Value);
+
+                // Получаем информацию о записи для подтверждения
+                string clientName = dgvAppointments.CurrentRow.Cells["ClientName"].Value?.ToString() ?? "Неизвестно";
+                string serviceName = dgvAppointments.CurrentRow.Cells["ServiceName"].Value?.ToString() ?? "Неизвестно";
+                string date = dgvAppointments.CurrentRow.Cells["AppointmentDate"].Value?.ToString() ?? "Неизвестно";
+                string time = dgvAppointments.CurrentRow.Cells["AppointmentTime"].Value?.ToString() ?? "Неизвестно";
+
+                // Предупреждение о необратимости действия
+                DialogResult result = MessageBox.Show(
+                    $"Вы действительно хотите УДАЛИТЬ запись?\n\n" +
+                    $"Клиент: {clientName}\n" +
+                    $"Услуга: {serviceName}\n" +
+                    $"Дата: {date}\n" +
+                    $"Время: {time}\n\n" +
+                    $"⚠️ ВНИМАНИЕ: Это действие необратимо! Запись будет полностью удалена из базы данных.\n" +
+                    $"Все связанные платежи также будут удалены.",
+                    "Подтверждение удаления",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (result == DialogResult.Yes)
+                {
+                    // Дополнительное подтверждение
+                    DialogResult confirmResult = MessageBox.Show(
+                        "Последнее предупреждение! Вы точно хотите безвозвратно удалить эту запись?",
+                        "Финальное подтверждение",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Exclamation);
+
+                    if (confirmResult == DialogResult.Yes)
+                    {
+                        // Начинаем транзакцию - удаляем сначала платежи, потом запись
+                        using (var connection = new SQLiteConnection("Data Source=barbershop.db;Version=3;"))
+                        {
+                            connection.Open();
+                            using (var transaction = connection.BeginTransaction())
+                            {
+                                try
+                                {
+                                    // Сначала удаляем связанные платежи
+                                    string deletePaymentsQuery = "DELETE FROM Payments WHERE AppointmentId = @appointmentId";
+                                    using (var cmdPayments = new SQLiteCommand(deletePaymentsQuery, connection, transaction))
+                                    {
+                                        cmdPayments.Parameters.AddWithValue("@appointmentId", appointmentId);
+                                        cmdPayments.ExecuteNonQuery();
+                                    }
+
+                                    // Затем удаляем саму запись
+                                    string deleteAppointmentQuery = "DELETE FROM Appointments WHERE Id = @id";
+                                    using (var cmdAppointment = new SQLiteCommand(deleteAppointmentQuery, connection, transaction))
+                                    {
+                                        cmdAppointment.Parameters.AddWithValue("@id", appointmentId);
+                                        int rowsAffected = cmdAppointment.ExecuteNonQuery();
+
+                                        if (rowsAffected > 0)
+                                        {
+                                            transaction.Commit();
+                                            MessageBox.Show("Запись успешно удалена", "Успех",
+                                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                            LoadData();
+                                        }
+                                        else
+                                        {
+                                            transaction.Rollback();
+                                            MessageBox.Show("Не удалось найти запись для удаления", "Ошибка",
+                                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    transaction.Rollback();
+                                    throw ex;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при удалении записи: {ex.Message}", "Ошибка",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
