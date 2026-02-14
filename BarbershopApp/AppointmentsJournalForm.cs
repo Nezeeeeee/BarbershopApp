@@ -3,6 +3,11 @@ using System.Data;
 using System.Data.SQLite;
 using System.Windows.Forms;
 using System.Drawing;
+using System.IO;
+using System.Diagnostics;
+using System.Collections.Generic;
+using OfficeOpenXml;
+using OfficeOpenXml.Style;
 
 namespace BarbershopApp
 {
@@ -12,163 +17,197 @@ namespace BarbershopApp
         private DataGridView dgvAppointments;
         private DateTimePicker dtpDate;
         private ComboBox cmbStatus;
-        private Button btnComplete, btnCancel, btnRefresh, btnPayment, btnDelete;
+        private Button btnComplete, btnCancel, btnRefresh, btnPayment, btnDelete, btnExport;
         private CheckBox chkShowAll;
         private Label lblInfo;
+        private bool isLicenseSet = false;
 
         public AppointmentsJournalForm(DatabaseHelper helper)
         {
-            dbHelper = helper;
-            this.Text = "Журнал записей";
-            this.Size = new Size(1300, 700);
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.IsMdiContainer = false;
+            try
+            {
+                // Устанавливаем лицензию для EPPlus
+                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                isLicenseSet = true;
 
-            SetupUI();
-            LoadData();
+                dbHelper = helper;
+                this.Text = "Журнал записей";
+                this.Size = new Size(1400, 700);
+                this.StartPosition = FormStartPosition.CenterParent;
+                this.IsMdiContainer = false;
+
+                SetupUI();
+                LoadData();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при инициализации формы: {ex.Message}\n\n" +
+                    "Пожалуйста, убедитесь что EPPlus установлен правильно.",
+                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void SetupUI()
         {
-            // Панель фильтров
-            var filterPanel = new Panel();
-            filterPanel.Dock = DockStyle.Top;
-            filterPanel.Height = 80;
-            filterPanel.Padding = new Padding(10);
-            filterPanel.BackColor = Color.FromArgb(240, 240, 240);
-            filterPanel.BorderStyle = BorderStyle.FixedSingle;
+            try
+            {
+                // Панель фильтров
+                var filterPanel = new Panel();
+                filterPanel.Dock = DockStyle.Top;
+                filterPanel.Height = 80;
+                filterPanel.Padding = new Padding(10);
+                filterPanel.BackColor = Color.FromArgb(240, 240, 240);
+                filterPanel.BorderStyle = BorderStyle.FixedSingle;
 
-            var lblDate = new Label();
-            lblDate.Text = "Дата:";
-            lblDate.Location = new Point(10, 15);
-            lblDate.AutoSize = true;
-            lblDate.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                var lblDate = new Label();
+                lblDate.Text = "Дата:";
+                lblDate.Location = new Point(10, 15);
+                lblDate.AutoSize = true;
+                lblDate.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
 
-            dtpDate = new DateTimePicker();
-            dtpDate.Location = new Point(60, 12);
-            dtpDate.Width = 150;
-            dtpDate.Format = DateTimePickerFormat.Short;
-            dtpDate.ValueChanged += DtpDate_ValueChanged;
+                dtpDate = new DateTimePicker();
+                dtpDate.Location = new Point(60, 12);
+                dtpDate.Width = 150;
+                dtpDate.Format = DateTimePickerFormat.Short;
+                dtpDate.ValueChanged += DtpDate_ValueChanged;
 
-            var lblStatus = new Label();
-            lblStatus.Text = "Статус:";
-            lblStatus.Location = new Point(230, 15);
-            lblStatus.AutoSize = true;
-            lblStatus.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                var lblStatus = new Label();
+                lblStatus.Text = "Статус:";
+                lblStatus.Location = new Point(230, 15);
+                lblStatus.AutoSize = true;
+                lblStatus.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
 
-            cmbStatus = new ComboBox();
-            cmbStatus.Location = new Point(290, 12);
-            cmbStatus.Width = 150;
-            cmbStatus.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbStatus.Items.AddRange(new object[] { "Все", "Запланирован", "Выполнен", "Отменен", "Не пришел" });
-            cmbStatus.SelectedIndex = 0;
-            cmbStatus.SelectedIndexChanged += CmbStatus_SelectedIndexChanged;
+                cmbStatus = new ComboBox();
+                cmbStatus.Location = new Point(290, 12);
+                cmbStatus.Width = 150;
+                cmbStatus.DropDownStyle = ComboBoxStyle.DropDownList;
+                cmbStatus.Items.AddRange(new object[] { "Все", "Запланирован", "Выполнен", "Отменен", "Не пришел" });
+                cmbStatus.SelectedIndex = 0;
+                cmbStatus.SelectedIndexChanged += CmbStatus_SelectedIndexChanged;
 
-            chkShowAll = new CheckBox();
-            chkShowAll.Text = "Показать все записи";
-            chkShowAll.Location = new Point(460, 12);
-            chkShowAll.AutoSize = true;
-            chkShowAll.CheckedChanged += ChkShowAll_CheckedChanged;
+                chkShowAll = new CheckBox();
+                chkShowAll.Text = "Показать все записи";
+                chkShowAll.Location = new Point(460, 12);
+                chkShowAll.AutoSize = true;
+                chkShowAll.CheckedChanged += ChkShowAll_CheckedChanged;
 
-            // Информационная надпись
-            lblInfo = new Label();
-            lblInfo.Text = "Всего записей: 0";
-            lblInfo.Location = new Point(600, 12);
-            lblInfo.AutoSize = true;
-            lblInfo.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Italic);
-            lblInfo.ForeColor = Color.Gray;
+                // Информационная надпись
+                lblInfo = new Label();
+                lblInfo.Text = "Всего записей: 0";
+                lblInfo.Location = new Point(600, 12);
+                lblInfo.AutoSize = true;
+                lblInfo.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Italic);
+                lblInfo.ForeColor = Color.Gray;
 
-            filterPanel.Controls.Add(lblDate);
-            filterPanel.Controls.Add(dtpDate);
-            filterPanel.Controls.Add(lblStatus);
-            filterPanel.Controls.Add(cmbStatus);
-            filterPanel.Controls.Add(chkShowAll);
-            filterPanel.Controls.Add(lblInfo);
+                filterPanel.Controls.Add(lblDate);
+                filterPanel.Controls.Add(dtpDate);
+                filterPanel.Controls.Add(lblStatus);
+                filterPanel.Controls.Add(cmbStatus);
+                filterPanel.Controls.Add(chkShowAll);
+                filterPanel.Controls.Add(lblInfo);
 
-            // Панель кнопок
-            var buttonPanel = new Panel();
-            buttonPanel.Dock = DockStyle.Top;
-            buttonPanel.Height = 50;
-            buttonPanel.Padding = new Padding(10);
-            buttonPanel.BackColor = Color.White;
+                // Панель кнопок
+                var buttonPanel = new Panel();
+                buttonPanel.Dock = DockStyle.Top;
+                buttonPanel.Height = 50;
+                buttonPanel.Padding = new Padding(10);
+                buttonPanel.BackColor = Color.White;
 
-            btnComplete = new Button();
-            btnComplete.Text = "✓ Выполнено";
-            btnComplete.Location = new Point(10, 10);
-            btnComplete.Size = new Size(100, 30);
-            btnComplete.BackColor = Color.FromArgb(46, 204, 113);
-            btnComplete.ForeColor = Color.White;
-            btnComplete.FlatStyle = FlatStyle.Flat;
-            btnComplete.FlatAppearance.BorderSize = 0;
-            btnComplete.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
-            btnComplete.Click += BtnComplete_Click;
+                btnComplete = new Button();
+                btnComplete.Text = "✓ Выполнено";
+                btnComplete.Location = new Point(10, 10);
+                btnComplete.Size = new Size(100, 30);
+                btnComplete.BackColor = Color.FromArgb(46, 204, 113);
+                btnComplete.ForeColor = Color.White;
+                btnComplete.FlatStyle = FlatStyle.Flat;
+                btnComplete.FlatAppearance.BorderSize = 0;
+                btnComplete.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                btnComplete.Click += BtnComplete_Click;
 
-            btnCancel = new Button();
-            btnCancel.Text = "✗ Отменить";
-            btnCancel.Location = new Point(120, 10);
-            btnCancel.Size = new Size(100, 30);
-            btnCancel.BackColor = Color.FromArgb(241, 176, 23);
-            btnCancel.ForeColor = Color.White;
-            btnCancel.FlatStyle = FlatStyle.Flat;
-            btnCancel.FlatAppearance.BorderSize = 0;
-            btnCancel.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
-            btnCancel.Click += BtnCancel_Click;
+                btnCancel = new Button();
+                btnCancel.Text = "✗ Отменить";
+                btnCancel.Location = new Point(120, 10);
+                btnCancel.Size = new Size(100, 30);
+                btnCancel.BackColor = Color.FromArgb(241, 176, 23);
+                btnCancel.ForeColor = Color.White;
+                btnCancel.FlatStyle = FlatStyle.Flat;
+                btnCancel.FlatAppearance.BorderSize = 0;
+                btnCancel.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                btnCancel.Click += BtnCancel_Click;
 
-            btnPayment = new Button();
-            btnPayment.Text = "💰 Оплата";
-            btnPayment.Location = new Point(230, 10);
-            btnPayment.Size = new Size(100, 30);
-            btnPayment.BackColor = Color.FromArgb(52, 152, 219);
-            btnPayment.ForeColor = Color.White;
-            btnPayment.FlatStyle = FlatStyle.Flat;
-            btnPayment.FlatAppearance.BorderSize = 0;
-            btnPayment.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
-            btnPayment.Click += BtnPayment_Click;
+                btnPayment = new Button();
+                btnPayment.Text = "💰 Оплата";
+                btnPayment.Location = new Point(230, 10);
+                btnPayment.Size = new Size(100, 30);
+                btnPayment.BackColor = Color.FromArgb(52, 152, 219);
+                btnPayment.ForeColor = Color.White;
+                btnPayment.FlatStyle = FlatStyle.Flat;
+                btnPayment.FlatAppearance.BorderSize = 0;
+                btnPayment.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                btnPayment.Click += BtnPayment_Click;
 
-            btnDelete = new Button();
-            btnDelete.Text = "🗑 Удалить";
-            btnDelete.Location = new Point(340, 10);
-            btnDelete.Size = new Size(100, 30);
-            btnDelete.BackColor = Color.FromArgb(231, 76, 60);
-            btnDelete.ForeColor = Color.White;
-            btnDelete.FlatStyle = FlatStyle.Flat;
-            btnDelete.FlatAppearance.BorderSize = 0;
-            btnDelete.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
-            btnDelete.Click += BtnDelete_Click;
+                btnDelete = new Button();
+                btnDelete.Text = "🗑 Удалить";
+                btnDelete.Location = new Point(340, 10);
+                btnDelete.Size = new Size(100, 30);
+                btnDelete.BackColor = Color.FromArgb(231, 76, 60);
+                btnDelete.ForeColor = Color.White;
+                btnDelete.FlatStyle = FlatStyle.Flat;
+                btnDelete.FlatAppearance.BorderSize = 0;
+                btnDelete.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                btnDelete.Click += BtnDelete_Click;
 
-            btnRefresh = new Button();
-            btnRefresh.Text = "🔄 Обновить";
-            btnRefresh.Location = new Point(450, 10);
-            btnRefresh.Size = new Size(100, 30);
-            btnRefresh.BackColor = Color.FromArgb(149, 165, 166);
-            btnRefresh.ForeColor = Color.White;
-            btnRefresh.FlatStyle = FlatStyle.Flat;
-            btnRefresh.FlatAppearance.BorderSize = 0;
-            btnRefresh.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
-            btnRefresh.Click += BtnRefresh_Click;
+                btnExport = new Button();
+                btnExport.Text = "📊 Excel";
+                btnExport.Location = new Point(450, 10);
+                btnExport.Size = new Size(100, 30);
+                btnExport.BackColor = Color.FromArgb(46, 134, 222);
+                btnExport.ForeColor = Color.White;
+                btnExport.FlatStyle = FlatStyle.Flat;
+                btnExport.FlatAppearance.BorderSize = 0;
+                btnExport.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                btnExport.Click += BtnExport_Click;
 
-            buttonPanel.Controls.Add(btnComplete);
-            buttonPanel.Controls.Add(btnCancel);
-            buttonPanel.Controls.Add(btnPayment);
-            buttonPanel.Controls.Add(btnDelete);
-            buttonPanel.Controls.Add(btnRefresh);
+                btnRefresh = new Button();
+                btnRefresh.Text = "🔄 Обновить";
+                btnRefresh.Location = new Point(560, 10);
+                btnRefresh.Size = new Size(100, 30);
+                btnRefresh.BackColor = Color.FromArgb(149, 165, 166);
+                btnRefresh.ForeColor = Color.White;
+                btnRefresh.FlatStyle = FlatStyle.Flat;
+                btnRefresh.FlatAppearance.BorderSize = 0;
+                btnRefresh.Font = new Font("Microsoft Sans Serif", 9, FontStyle.Bold);
+                btnRefresh.Click += BtnRefresh_Click;
 
-            // Таблица записей
-            dgvAppointments = new DataGridView();
-            dgvAppointments.Dock = DockStyle.Fill;
-            dgvAppointments.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            dgvAppointments.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvAppointments.MultiSelect = false;
-            dgvAppointments.AllowUserToAddRows = false;
-            dgvAppointments.ReadOnly = true;
-            dgvAppointments.RowHeadersVisible = false;
-            dgvAppointments.BackgroundColor = Color.White;
-            dgvAppointments.BorderStyle = BorderStyle.Fixed3D;
-            dgvAppointments.CellFormatting += DgvAppointments_CellFormatting;
+                buttonPanel.Controls.Add(btnComplete);
+                buttonPanel.Controls.Add(btnCancel);
+                buttonPanel.Controls.Add(btnPayment);
+                buttonPanel.Controls.Add(btnDelete);
+                buttonPanel.Controls.Add(btnExport);
+                buttonPanel.Controls.Add(btnRefresh);
 
-            this.Controls.Add(dgvAppointments);
-            this.Controls.Add(buttonPanel);
-            this.Controls.Add(filterPanel);
+                // Таблица записей
+                dgvAppointments = new DataGridView();
+                dgvAppointments.Dock = DockStyle.Fill;
+                dgvAppointments.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+                dgvAppointments.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+                dgvAppointments.MultiSelect = true;
+                dgvAppointments.AllowUserToAddRows = false;
+                dgvAppointments.ReadOnly = true;
+                dgvAppointments.RowHeadersVisible = false;
+                dgvAppointments.BackgroundColor = Color.White;
+                dgvAppointments.BorderStyle = BorderStyle.Fixed3D;
+                dgvAppointments.CellFormatting += DgvAppointments_CellFormatting;
+
+                this.Controls.Add(dgvAppointments);
+                this.Controls.Add(buttonPanel);
+                this.Controls.Add(filterPanel);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при создании интерфейса: {ex.Message}", "Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void LoadData()
@@ -193,7 +232,8 @@ namespace BarbershopApp
                             a.AppointmentTime,
                             a.Status,
                             a.Notes,
-                            (SELECT IFNULL(SUM(Amount), 0) FROM Payments WHERE AppointmentId = a.Id) as PaidAmount
+                            (SELECT IFNULL(SUM(Amount), 0) FROM Payments WHERE AppointmentId = a.Id) as PaidAmount,
+                            s.Price - (SELECT IFNULL(SUM(Amount), 0) FROM Payments WHERE AppointmentId = a.Id) as DebtAmount
                         FROM Appointments a
                         LEFT JOIN Clients c ON a.ClientId = c.Id
                         LEFT JOIN Employees e ON a.EmployeeId = e.Id
@@ -225,7 +265,8 @@ namespace BarbershopApp
                             a.AppointmentTime,
                             a.Status,
                             a.Notes,
-                            (SELECT IFNULL(SUM(Amount), 0) FROM Payments WHERE AppointmentId = a.Id) as PaidAmount
+                            (SELECT IFNULL(SUM(Amount), 0) FROM Payments WHERE AppointmentId = a.Id) as PaidAmount,
+                            s.Price - (SELECT IFNULL(SUM(Amount), 0) FROM Payments WHERE AppointmentId = a.Id) as DebtAmount
                         FROM Appointments a
                         LEFT JOIN Clients c ON a.ClientId = c.Id
                         LEFT JOIN Employees e ON a.EmployeeId = e.Id
@@ -321,6 +362,13 @@ namespace BarbershopApp
                 {
                     dgvAppointments.Columns["PaidAmount"].HeaderText = "Оплачено";
                     dgvAppointments.Columns["PaidAmount"].DefaultCellStyle.Format = "C2";
+                }
+
+                if (dgvAppointments.Columns.Contains("DebtAmount"))
+                {
+                    dgvAppointments.Columns["DebtAmount"].HeaderText = "Долг";
+                    dgvAppointments.Columns["DebtAmount"].DefaultCellStyle.Format = "C2";
+                    dgvAppointments.Columns["DebtAmount"].DefaultCellStyle.ForeColor = Color.Red;
                 }
             }
             catch (Exception ex)
@@ -519,7 +567,7 @@ namespace BarbershopApp
                     return;
                 }
 
-                // Простая форма для причины отмены
+                // Используем InputBox для ввода причины
                 string reason = Microsoft.VisualBasic.Interaction.InputBox(
                     "Укажите причину отмены:",
                     "Причина отмены",
@@ -815,6 +863,352 @@ namespace BarbershopApp
                 MessageBox.Show($"Ошибка при удалении записи: {ex.Message}", "Ошибка",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void BtnExport_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Проверяем, установлена ли лицензия
+                if (!isLicenseSet)
+                {
+                    ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                    isLicenseSet = true;
+                }
+
+                // Проверяем, есть ли данные для экспорта
+                if (dgvAppointments.Rows.Count == 0)
+                {
+                    MessageBox.Show("Нет данных для экспорта", "Информация",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // Спрашиваем пользователя, что экспортировать
+                DialogResult exportChoice = MessageBox.Show(
+                    "Что вы хотите экспортировать?\n\n" +
+                    "Нажмите 'Да' - экспортировать ВСЕ записи\n" +
+                    "Нажмите 'Нет' - экспортировать только ВЫДЕЛЕННЫЕ записи\n" +
+                    "Нажмите 'Отмена' - отменить экспорт",
+                    "Выбор данных для экспорта",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question);
+
+                if (exportChoice == DialogResult.Cancel)
+                    return;
+
+                // Выбираем директорию для сохранения
+                SaveFileDialog saveFileDialog = new SaveFileDialog();
+                saveFileDialog.Filter = "Excel Files|*.xlsx|CSV Files|*.csv";
+                saveFileDialog.DefaultExt = "xlsx";
+                saveFileDialog.FileName = $"Журнал_записей_{DateTime.Now:yyyyMMdd_HHmmss}";
+                saveFileDialog.Title = "Сохранить отчет";
+
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    string filePath = saveFileDialog.FileName;
+                    string extension = Path.GetExtension(filePath).ToLower();
+
+                    if (extension == ".csv")
+                    {
+                        ExportToCsv(filePath, exportChoice);
+                    }
+                    else
+                    {
+                        ExportToExcel(filePath, exportChoice);
+                    }
+
+                    // Спрашиваем, открыть ли файл
+                    if (MessageBox.Show("Данные успешно экспортированы!\n\nОткрыть файл?", "Экспорт завершен",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    {
+                        try
+                        {
+                            Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Не удалось открыть файл: {ex.Message}\n\nФайл сохранен по пути:\n{filePath}",
+                                "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при экспорте: {ex.Message}", "Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ExportToExcel(string filePath, DialogResult exportChoice)
+        {
+            try
+            {
+                using (ExcelPackage package = new ExcelPackage())
+                {
+                    // Создаем лист
+                    ExcelWorksheet worksheet = package.Workbook.Worksheets.Add("Журнал записей");
+
+                    // Заголовки
+                    List<string> headers = new List<string>();
+                    foreach (DataGridViewColumn column in dgvAppointments.Columns)
+                    {
+                        if (column.Visible && column.Name != "Id")
+                        {
+                            headers.Add(column.HeaderText);
+                        }
+                    }
+
+                    // Записываем заголовки
+                    for (int i = 0; i < headers.Count; i++)
+                    {
+                        worksheet.Cells[1, i + 1].Value = headers[i];
+                        worksheet.Cells[1, i + 1].Style.Font.Bold = true;
+                        worksheet.Cells[1, i + 1].Style.Fill.PatternType = ExcelFillStyle.Solid;
+                        worksheet.Cells[1, i + 1].Style.Fill.BackgroundColor.SetColor(Color.LightGray);
+                        worksheet.Cells[1, i + 1].Style.Border.BorderAround(ExcelBorderStyle.Thin);
+                    }
+
+                    int row = 2;
+
+                    if (exportChoice == DialogResult.Yes) // Все записи
+                    {
+                        foreach (DataGridViewRow dgvRow in dgvAppointments.Rows)
+                        {
+                            if (!dgvRow.IsNewRow)
+                            {
+                                int col = 1;
+                                foreach (DataGridViewColumn column in dgvAppointments.Columns)
+                                {
+                                    if (column.Visible && column.Name != "Id")
+                                    {
+                                        object value = dgvRow.Cells[column.Name].Value;
+
+                                        if (value != null && value != DBNull.Value)
+                                        {
+                                            if (column.Name == "Price" || column.Name == "PaidAmount" || column.Name == "DebtAmount")
+                                            {
+                                                // Для денежных значений
+                                                string stringValue = value.ToString().Replace("₽", "").Trim();
+                                                if (decimal.TryParse(stringValue, out decimal decValue))
+                                                {
+                                                    worksheet.Cells[row, col].Value = decValue;
+                                                    worksheet.Cells[row, col].Style.Numberformat.Format = "#,##0.00₽";
+                                                }
+                                                else
+                                                {
+                                                    worksheet.Cells[row, col].Value = value.ToString();
+                                                }
+                                            }
+                                            else
+                                            {
+                                                worksheet.Cells[row, col].Value = value.ToString();
+                                            }
+                                        }
+                                        else
+                                        {
+                                            worksheet.Cells[row, col].Value = "";
+                                        }
+                                        col++;
+                                    }
+                                }
+                                row++;
+                            }
+                        }
+                    }
+                    else if (exportChoice == DialogResult.No) // Только выделенные
+                    {
+                        if (dgvAppointments.SelectedRows.Count == 0)
+                        {
+                            MessageBox.Show("Нет выделенных записей для экспорта", "Информация",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return;
+                        }
+
+                        foreach (DataGridViewRow dgvRow in dgvAppointments.SelectedRows)
+                        {
+                            int col = 1;
+                            foreach (DataGridViewColumn column in dgvAppointments.Columns)
+                            {
+                                if (column.Visible && column.Name != "Id")
+                                {
+                                    object value = dgvRow.Cells[column.Name].Value;
+
+                                    if (value != null && value != DBNull.Value)
+                                    {
+                                        if (column.Name == "Price" || column.Name == "PaidAmount" || column.Name == "DebtAmount")
+                                        {
+                                            string stringValue = value.ToString().Replace("₽", "").Trim();
+                                            if (decimal.TryParse(stringValue, out decimal decValue))
+                                            {
+                                                worksheet.Cells[row, col].Value = decValue;
+                                                worksheet.Cells[row, col].Style.Numberformat.Format = "#,##0.00₽";
+                                            }
+                                            else
+                                            {
+                                                worksheet.Cells[row, col].Value = value.ToString();
+                                            }
+                                        }
+                                        else
+                                        {
+                                            worksheet.Cells[row, col].Value = value.ToString();
+                                        }
+                                    }
+                                    else
+                                    {
+                                        worksheet.Cells[row, col].Value = "";
+                                    }
+                                    col++;
+                                }
+                            }
+                            row++;
+                        }
+                    }
+
+                    // Автоподбор ширины колонок
+                    if (row > 2)
+                    {
+                        worksheet.Cells[1, 1, row - 1, headers.Count].AutoFitColumns();
+
+                        // Добавляем итоговую строку
+                        int lastRow = row - 1;
+                        worksheet.Cells[lastRow + 1, 1].Value = "ИТОГО:";
+                        worksheet.Cells[lastRow + 1, 1].Style.Font.Bold = true;
+
+                        // Находим колонки с ценами
+                        int priceCol = headers.IndexOf("Цена") + 1;
+                        int paidCol = headers.IndexOf("Оплачено") + 1;
+                        int debtCol = headers.IndexOf("Долг") + 1;
+
+                        if (priceCol > 0)
+                        {
+                            worksheet.Cells[lastRow + 1, priceCol].Formula = $"SUM({GetColumnLetter(priceCol)}2:{GetColumnLetter(priceCol)}{lastRow})";
+                            worksheet.Cells[lastRow + 1, priceCol].Style.Numberformat.Format = "#,##0.00₽";
+                            worksheet.Cells[lastRow + 1, priceCol].Style.Font.Bold = true;
+                        }
+
+                        if (paidCol > 0)
+                        {
+                            worksheet.Cells[lastRow + 1, paidCol].Formula = $"SUM({GetColumnLetter(paidCol)}2:{GetColumnLetter(paidCol)}{lastRow})";
+                            worksheet.Cells[lastRow + 1, paidCol].Style.Numberformat.Format = "#,##0.00₽";
+                            worksheet.Cells[lastRow + 1, paidCol].Style.Font.Bold = true;
+                        }
+
+                        if (debtCol > 0)
+                        {
+                            worksheet.Cells[lastRow + 1, debtCol].Formula = $"SUM({GetColumnLetter(debtCol)}2:{GetColumnLetter(debtCol)}{lastRow})";
+                            worksheet.Cells[lastRow + 1, debtCol].Style.Numberformat.Format = "#,##0.00₽";
+                            worksheet.Cells[lastRow + 1, debtCol].Style.Font.Bold = true;
+                        }
+                    }
+
+                    // Сохраняем файл
+                    FileInfo fileInfo = new FileInfo(filePath);
+                    package.SaveAs(fileInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при создании Excel файла: {ex.Message}");
+            }
+        }
+
+        private void ExportToCsv(string filePath, DialogResult exportChoice)
+        {
+            try
+            {
+                using (StreamWriter sw = new StreamWriter(filePath, false, System.Text.Encoding.UTF8))
+                {
+                    // Заголовки
+                    List<string> headers = new List<string>();
+                    foreach (DataGridViewColumn column in dgvAppointments.Columns)
+                    {
+                        if (column.Visible && column.Name != "Id")
+                        {
+                            headers.Add(column.HeaderText);
+                        }
+                    }
+
+                    // Записываем заголовки
+                    sw.WriteLine(string.Join(";", headers));
+
+                    if (exportChoice == DialogResult.Yes) // Все записи
+                    {
+                        foreach (DataGridViewRow dgvRow in dgvAppointments.Rows)
+                        {
+                            if (!dgvRow.IsNewRow)
+                            {
+                                List<string> rowValues = new List<string>();
+                                foreach (DataGridViewColumn column in dgvAppointments.Columns)
+                                {
+                                    if (column.Visible && column.Name != "Id")
+                                    {
+                                        object value = dgvRow.Cells[column.Name].Value;
+                                        string stringValue = value?.ToString() ?? "";
+
+                                        // Экранируем кавычки и разделители
+                                        if (stringValue.Contains(";") || stringValue.Contains("\"") || stringValue.Contains("\n"))
+                                        {
+                                            stringValue = "\"" + stringValue.Replace("\"", "\"\"") + "\"";
+                                        }
+
+                                        rowValues.Add(stringValue);
+                                    }
+                                }
+                                sw.WriteLine(string.Join(";", rowValues));
+                            }
+                        }
+                    }
+                    else if (exportChoice == DialogResult.No) // Только выделенные
+                    {
+                        if (dgvAppointments.SelectedRows.Count == 0)
+                        {
+                            MessageBox.Show("Нет выделенных записей для экспорта", "Информация",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return;
+                        }
+
+                        foreach (DataGridViewRow dgvRow in dgvAppointments.SelectedRows)
+                        {
+                            List<string> rowValues = new List<string>();
+                            foreach (DataGridViewColumn column in dgvAppointments.Columns)
+                            {
+                                if (column.Visible && column.Name != "Id")
+                                {
+                                    object value = dgvRow.Cells[column.Name].Value;
+                                    string stringValue = value?.ToString() ?? "";
+
+                                    // Экранируем кавычки и разделители
+                                    if (stringValue.Contains(";") || stringValue.Contains("\"") || stringValue.Contains("\n"))
+                                    {
+                                        stringValue = "\"" + stringValue.Replace("\"", "\"\"") + "\"";
+                                    }
+
+                                    rowValues.Add(stringValue);
+                                }
+                            }
+                            sw.WriteLine(string.Join(";", rowValues));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при создании CSV файла: {ex.Message}");
+            }
+        }
+
+        private string GetColumnLetter(int columnNumber)
+        {
+            string columnLetter = "";
+            while (columnNumber > 0)
+            {
+                int modulo = (columnNumber - 1) % 26;
+                columnLetter = Convert.ToChar(65 + modulo) + columnLetter;
+                columnNumber = (columnNumber - modulo) / 26;
+            }
+            return columnLetter;
         }
 
         private void BtnRefresh_Click(object sender, EventArgs e)
